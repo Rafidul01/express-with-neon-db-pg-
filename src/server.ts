@@ -1,15 +1,16 @@
 import express, { type Application, type Request, type Response } from 'express'
 import { Pool } from 'pg'
+import config from './config';
 
 const app : Application = express()
-const port = 3000
+const port = config.PORT
 
 app.use(express.json());
 app.use(express.text());
 app.use(express.urlencoded({extended:true}))
 
 const pool = new Pool({
-    connectionString:"postgresql://.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require"
+    connectionString: config.connection_string
 });
 
 const initDB = async ()=>{
@@ -43,17 +44,122 @@ app.get('/', (req : Request, res: Response) => {
         })
 })
 
-app.post('/',async(req : Request, res: Response) => {
+app.post('/api/users',async(req : Request, res: Response) => {
     // console.log(req.body)
-    const {name, email, password}= req.body;
-    res.status(200).json({
-        "message": ' World!' ,
-        "body" : {
-            name,
-            email,
-        },
-       
+    const {name, email, password, age}= req.body;
+    try{
+        const result = await pool.query(`
+        INSERT INTO users(name, email, password, age) VALUES($1,$2,$3,$4)
+        RETURNING *
+        `, [name, email, password, age]);
+    // console.log(result)
+    res.status(201).json({
+        "message": ' User Created Successfully!' ,
+        "body" : result.rows[0],
        })
+
+    }catch(err : any){
+        res.status(500).json({
+        message: err.message ,
+        error : err,
+       });
+    }
+})
+
+app.get('/api/users',async(req : Request, res: Response) => {
+    try{
+        const result = await pool.query(`SELECT * FROM users`);
+        res.status(200).json({
+            "success": true,
+            "message": 'User retrieved Successfully!' ,
+            "data" : result.rows,
+           })
+
+    }catch(err : any){
+        res.status(500).json({
+        message: err.message ,
+        error : err,
+       });
+    }
+})
+app.get('/api/users/:id',async(req : Request, res: Response) => {
+    const {id} = req.params;
+    try{
+        const result = await pool.query(`
+            
+            SELECT * FROM users WHERE id = $1
+            `, [id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                "success": false,
+                "message": 'User not found!' ,
+            })
+        }
+        res.status(200).json({
+            "success": true,
+            "message": 'User retrieved Successfully!' ,
+            "data" : result.rows[0],
+        })
+    }catch(err : any){
+        res.status(500).json({
+        message: err.message ,
+        error : err,
+       });
+    }
+})
+
+app.put('/api/users/:id',async(req : Request, res: Response) => {
+    const {id} = req.params;
+    const {name,password,is_active, age}= req.body;
+    try{
+        const result = await pool.query(`
+        UPDATE users SET name = COALESCE($1, name), password = COALESCE($2, password), is_active = COALESCE($3, is_active), age = COALESCE($4, age) WHERE id = $5
+        RETURNING *
+        `, [name, password, is_active, age, id]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                "success": false,
+                "message": 'User not found!' ,
+            })
+        }
+        res.status(200).json({
+            "success": true,
+            "message": 'User updated Successfully!' ,
+            "data" : result.rows[0],
+           })
+    }catch(err : any){
+        res.status(500).json({
+        message: err.message ,
+        error : err,
+       });
+    }
+})
+
+app.delete('/api/users/:id',async(req : Request, res: Response) => {
+    const {id} = req.params;
+    try{
+        const result = await pool.query(`
+        DELETE FROM users WHERE id = $1
+        RETURNING *
+        `, [id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({
+                "success": false,
+                "message": 'User not found!' ,
+            })
+        }
+        res.status(200).json({
+            "success": true,
+            "message": 'User deleted Successfully!' ,
+            "data" : result.rows[0],
+           })
+    }catch(err : any){
+        res.status(500).json({
+        message: err.message ,
+        error : err,
+       });
+    }
 })
 
 app.listen(port, () => {
